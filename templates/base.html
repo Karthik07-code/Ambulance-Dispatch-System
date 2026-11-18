@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Ambulance Dispatch System{% endblock %} - DSA Simulation</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+    <!-- Navigation Header -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2 shadow-sm sticky-top">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center" href="{{ url_for('dashboard') }}">
+                <span class="badge bg-danger rounded-circle p-2 me-2">
+                    <i class="bi bi-hospital fs-5"></i>
+                </span>
+                <div>
+                    <span class="fs-5 fw-bold">E-Ambulance</span>
+                    <span class="badge bg-secondary ms-1 fs-xs">DSA Simulation</span>
+                </div>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" aria-controls="navbarMain" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarMain">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                            <i class="bi bi-speedometer2 me-1"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'list_ambulances' %}active{% endif %}" href="{{ url_for('list_ambulances') }}">
+                            <i class="bi bi-truck-front-fill me-1"></i> Ambulances
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'list_emergencies' %}active{% endif %}" href="{{ url_for('list_emergencies') }}">
+                            <i class="bi bi-telephone-inbound-fill me-1"></i> Emergency Requests
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'dispatch_history' %}active{% endif %}" href="{{ url_for('dispatch_history') }}">
+                            <i class="bi bi-clock-history me-1"></i> Dispatch History
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'dsa_architecture' %}active{% endif %}" href="{{ url_for('dsa_architecture') }}">
+                            <i class="bi bi-diagram-3-fill me-1"></i> DSA Details
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'driver_dashboard' %}active{% endif %}" href="{{ url_for('driver_dashboard') }}">
+                            <i class="bi bi-steering-wheel me-1"></i> Driver Cockpit
+                        </a>
+                    </li>
+                    <li class="nav-item ms-lg-3 mt-2 mt-lg-0 d-flex gap-2 align-items-center">
+                        <form action="{{ url_for('auto_dispatch') }}" method="POST" class="d-inline">
+                            <button type="submit" class="btn btn-danger btn-sm px-3 shadow-sm fw-bold">
+                                <i class="bi bi-lightning-charge-fill me-1"></i> Auto Dispatch
+                            </button>
+                        </form>
+                        <a href="{{ url_for('user_home') }}" class="btn btn-outline-light btn-sm px-2.5 shadow-sm" target="_blank" title="Open Public Booking Portal in new tab">
+                            <i class="bi bi-person-circle me-1"></i> User Portal <i class="bi bi-box-arrow-up-right ms-1 text-xs"></i>
+                        </a>
+                        {% if current_user %}
+                        <a href="{{ url_for('logout') }}" class="btn btn-outline-secondary btn-sm px-2 text-light" title="Sign out {{ current_user.username }}">
+                            <i class="bi bi-box-arrow-right"></i>
+                        </a>
+                        {% else %}
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-info btn-sm px-2.5" title="Staff Sign In">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+                        </a>
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="main-content py-4">
+        <div class="container-fluid px-4">
+            <!-- Flash Message Alerts -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        {% set alert_type = 'danger' if category == 'error' else (category if category in ['success', 'warning', 'info'] else 'primary') %}
+                        <div class="alert alert-{{ alert_type }} alert-dismissible fade show shadow-sm" role="alert">
+                            <div class="d-flex align-items-center">
+                                {% if alert_type == 'success' %}
+                                    <i class="bi bi-check-circle-fill fs-5 me-2"></i>
+                                {% elif alert_type == 'danger' %}
+                                    <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
+                                {% elif alert_type == 'warning' %}
+                                    <i class="bi bi-exclamation-circle-fill fs-5 me-2"></i>
+                                {% else %}
+                                    <i class="bi bi-info-circle-fill fs-5 me-2"></i>
+                                {% endif %}
+                                <div>{{ message }}</div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-top py-3 mt-auto text-muted">
+        <div class="container-fluid px-4 d-flex flex-column flex-sm-row justify-content-between align-items-center small">
+            <div>
+                <strong>Emergency Ambulance Dispatch System</strong> — College Mini Project Demonstration
+            </div>
+            <div class="mt-2 mt-sm-0">
+                <span class="badge bg-light text-secondary border me-2">Python & Flask</span>
+                <span class="badge bg-light text-secondary border me-2">Min-Heap & Dijkstra</span>
+                <span class="badge bg-light text-secondary border">SQLite</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
+

@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}DSA Architecture & Live Simulator{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">Data Structures & Algorithms (DSA) Architecture</h2>
+        <p class="text-muted mb-0">Academic demonstration of Min-Heap Priority Queue, Adjacency List Graph, and Dijkstra's Shortest Path.</p>
+    </div>
+</div>
+
+<!-- Live Route Calculator Test Bench -->
+<div class="card mb-4 shadow-sm border-primary">
+    <div class="card-header bg-primary text-white py-3">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-play-circle-fill me-2"></i>Live Dijkstra Path Simulator</h5>
+    </div>
+    <div class="card-body p-4">
+        <p class="text-muted small">Select any starting base and incident location on the predefined road network to run Dijkstra's algorithm and inspect the exact path and road distance.</p>
+        <form method="POST" action="{{ url_for('dsa_architecture') }}" class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label for="start_node" class="form-label fw-semibold">Source Location (Ambulance Base):</label>
+                <select name="start_node" id="start_node" class="form-select" required>
+                    {% for loc in predefined_locations %}
+                    <option value="{{ loc }}" {% if selected_start == loc %}selected{% endif %}>{{ loc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label for="target_node" class="form-label fw-semibold">Destination Location (Incident Spot):</label>
+                <select name="target_node" id="target_node" class="form-select" required>
+                    {% for loc in predefined_locations %}
+                    <option value="{{ loc }}" {% if selected_target == loc %}selected{% endif %}>{{ loc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100 fw-bold">
+                    <i class="bi bi-calculator me-1"></i> Compute Path
+                </button>
+            </div>
+        </form>
+
+        {% if computed_path is not none %}
+        <div class="mt-4 p-3 rounded bg-light border">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+                <div>
+                    <h6 class="fw-bold text-dark mb-1">
+                        Dijkstra Result: {{ selected_start }} &rarr; {{ selected_target }}
+                    </h6>
+                    <div class="d-flex align-items-center flex-wrap gap-2 mt-2">
+                        <span class="badge bg-success fs-6 py-2 px-3">Total Distance: {{ computed_dist }} km</span>
+                        <span class="route-badge">{{ computed_path|join(' &rarr; ') }}</span>
+                    </div>
+                </div>
+                <div class="text-muted small mt-2 mt-md-0">
+                    <i class="bi bi-check-circle-fill text-success me-1"></i> Shortest road distance verified
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 3 Academic Cards Explaining the DSA -->
+<div class="row g-4">
+    <!-- 1. Priority Queue & Min Heap -->
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-danger"><i class="bi bi-layers-fill me-2"></i>1. Priority Queue (Min-Heap)</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Implemented in <code>dsa/priority_queue.py</code> using a custom binary min-heap array.</p>
+                <h6 class="fw-bold">Severity Ranks:</h6>
+                <ul class="list-group list-group-flush small mb-3">
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span>Critical</span> <span class="badge bg-danger">Rank 1 (Top Priority)</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span>High</span> <span class="badge bg-warning text-dark">Rank 2</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span>Medium</span> <span class="badge bg-primary">Rank 3</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span>Low</span> <span class="badge bg-secondary">Rank 4 (Lowest)</span>
+                    </li>
+                </ul>
+                <h6 class="fw-bold">FIFO Tie-Breaking:</h6>
+                <p class="small text-muted mb-3">
+                    When two calls have identical severity, the heap compares the secondary key (arrival order / <code>request_id</code>), ensuring strict First-In, First-Out servicing.
+                </p>
+                <div class="bg-light p-2 rounded small font-monospace">
+                    Parent: (i - 1) // 2<br>
+                    Left Child: 2*i + 1<br>
+                    Right Child: 2*i + 2<br>
+                    Time Complexity: O(log N)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Road Network Graph -->
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-diagram-3-fill me-2"></i>2. Graph (Adjacency List)</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Implemented in <code>dsa/graph.py</code>. The road network is modeled as an undirected, weighted graph G = (V, E).</p>
+                <h6 class="fw-bold">Coimbatore Road Hubs (V):</h6>
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    {% for loc in predefined_locations %}
+                    <span class="badge bg-light text-dark border">{{ loc }}</span>
+                    {% endfor %}
+                </div>
+                <h6 class="fw-bold">Edge Storage (Adjacency List):</h6>
+                <div class="table-responsive small">
+                    <table class="table table-sm table-bordered mb-2">
+                        <thead class="table-light">
+                            <tr><th>From</th><th>To</th><th>Dist (km)</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for edge in network_edges[:6] %}
+                            <tr>
+                                <td>{{ edge.from }}</td>
+                                <td>{{ edge.to }}</td>
+                                <td class="fw-bold">{{ edge.distance_km }} km</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-xs text-muted mb-0">Space Complexity: O(V + E) vs O(V&sup2;) for matrix.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Dijkstra's Algorithm -->
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0 text-success"><i class="bi bi-signpost-2-fill me-2"></i>3. Dijkstra's Algorithm</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Implemented in <code>dsa/dijkstra.py</code> to calculate the optimal real-world road route.</p>
+                <h6 class="fw-bold">Mechanics:</h6>
+                <ol class="small text-muted ps-3 mb-3">
+                    <li>Initialize distance to start node as 0, all others &infin;.</li>
+                    <li>Min-Heap stores <code>(dist, vertex)</code> pairs.</li>
+                    <li>Greedily extract the vertex with minimal tentative distance.</li>
+                    <li>Relax all adjacent outgoing road edges:
+                        <br><code>if dist[u] + w &lt; dist[v]: dist[v] = dist[u] + w</code>
+                    </li>
+                    <li>Backtrack via predecessor map to yield the full path array.</li>
+                </ol>
+                <div class="bg-light p-2 rounded small font-monospace">
+                    Time: O((V + E) log V)<br>
+                    Space: O(V)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

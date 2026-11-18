@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}{% if emergency %}Edit Emergency Request #{{ emergency.request_id }}{% else %}Register Emergency Call{% endif %}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7 col-md-9">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h4 class="mb-0 fw-bold">
+                    <i class="bi bi-telephone-inbound-fill text-danger me-2"></i>
+                    {% if emergency %}Edit Emergency Request #{{ emergency.request_id }}{% else %}Register New Emergency Call{% endif %}
+                </h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="{% if emergency %}{{ url_for('edit_emergency', request_id=emergency.request_id) }}{% else %}{{ url_for('new_emergency') }}{% endif %}">
+                    
+                    <div class="mb-3">
+                        <label for="patient_name" class="form-label fw-semibold">Patient Name / Caller Label <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="patient_name" name="patient_name" 
+                               value="{{ emergency.patient_name if emergency else '' }}" 
+                               placeholder="e.g. Ramesh Kumar / Accident Victim A" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="emergency_location" class="form-label fw-semibold">Incident / Emergency Location <span class="text-danger">*</span></label>
+                        <select class="form-select" id="emergency_location" name="emergency_location" required>
+                            <option value="" disabled {% if not emergency %}selected{% endif %}>-- Select Incident Hub --</option>
+                            {% for loc in predefined_locations %}
+                            <option value="{{ loc }}" {% if emergency and emergency.emergency_location == loc %}selected{% endif %}>
+                                {{ loc }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Predefined location node within the road network where the ambulance will navigate.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Triage Severity Level <span class="text-danger">*</span></label>
+                        <div class="row g-2">
+                            <div class="col-6 col-sm-3">
+                                <input type="radio" class="btn-check" name="severity" id="sev_critical" value="Critical" 
+                                       {% if (emergency and emergency.severity == 'Critical') or not emergency %}checked{% endif %}>
+                                <label class="btn btn-outline-danger w-100 py-2 d-flex flex-column align-items-center" for="sev_critical">
+                                    <i class="bi bi-heart-pulse-fill fs-5 mb-1"></i>
+                                    <strong class="small">Critical</strong>
+                                    <span class="text-xs text-muted">Rank 1</span>
+                                </label>
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <input type="radio" class="btn-check" name="severity" id="sev_high" value="High"
+                                       {% if emergency and emergency.severity == 'High' %}checked{% endif %}>
+                                <label class="btn btn-outline-warning text-dark w-100 py-2 d-flex flex-column align-items-center" for="sev_high">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5 mb-1 text-warning"></i>
+                                    <strong class="small">High</strong>
+                                    <span class="text-xs text-muted">Rank 2</span>
+                                </label>
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <input type="radio" class="btn-check" name="severity" id="sev_medium" value="Medium"
+                                       {% if emergency and emergency.severity == 'Medium' %}checked{% endif %}>
+                                <label class="btn btn-outline-primary w-100 py-2 d-flex flex-column align-items-center" for="sev_medium">
+                                    <i class="bi bi-info-circle-fill fs-5 mb-1"></i>
+                                    <strong class="small">Medium</strong>
+                                    <span class="text-xs text-muted">Rank 3</span>
+                                </label>
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <input type="radio" class="btn-check" name="severity" id="sev_low" value="Low"
+                                       {% if emergency and emergency.severity == 'Low' %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary w-100 py-2 d-flex flex-column align-items-center" for="sev_low">
+                                    <i class="bi bi-dash-circle fs-5 mb-1"></i>
+                                    <strong class="small">Low</strong>
+                                    <span class="text-xs text-muted">Rank 4</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-text mt-2">
+                            The Min-Heap Priority Queue prioritises calls strictly by Severity (Rank 1 &gt; Rank 2 &gt; Rank 3 &gt; Rank 4), with FIFO tie-breaker.
+                        </div>
+                    </div>
+
+                    {% if emergency %}
+                    <div class="mb-4">
+                        <label for="request_status" class="form-label fw-semibold">Request Status</label>
+                        <select class="form-select" id="request_status" name="request_status">
+                            <option value="Pending" {% if emergency.request_status == 'Pending' %}selected{% endif %}>Pending</option>
+                            <option value="Assigned" {% if emergency.request_status == 'Assigned' %}selected{% endif %}>Assigned</option>
+                            <option value="Completed" {% if emergency.request_status == 'Completed' %}selected{% endif %}>Completed</option>
+                            <option value="Cancelled" {% if emergency.request_status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
+                        </select>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('list_emergencies') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-danger px-4 fw-semibold">
+                            <i class="bi bi-check2-circle me-1"></i> {% if emergency %}Save Changes{% else %}Log Emergency Call{% endif %}
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

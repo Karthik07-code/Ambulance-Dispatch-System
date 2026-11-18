@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{% if ambulance %}Edit Ambulance {{ ambulance.ambulance_number }}{% else %}Register New Ambulance{% endif %}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <h4 class="mb-0 fw-bold">
+                    <i class="bi bi-truck-front-fill text-danger me-2"></i>
+                    {% if ambulance %}Edit Ambulance ({{ ambulance.ambulance_number }}){% else %}Register New Ambulance{% endif %}
+                </h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="{% if ambulance %}{{ url_for('edit_ambulance', ambulance_id=ambulance.ambulance_id) }}{% else %}{{ url_for('new_ambulance') }}{% endif %}">
+                    
+                    <div class="mb-3">
+                        <label for="ambulance_number" class="form-label fw-semibold">Ambulance Number / Vehicle ID <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="ambulance_number" name="ambulance_number" 
+                               value="{{ ambulance.ambulance_number if ambulance else '' }}" 
+                               placeholder="e.g. AMB-106" required>
+                        <div class="form-text">Must be a unique vehicle registration identifier.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="current_location" class="form-label fw-semibold">Current Base Location <span class="text-danger">*</span></label>
+                        <select class="form-select" id="current_location" name="current_location" required>
+                            <option value="" disabled {% if not ambulance %}selected{% endif %}>-- Select Predefined Road Hub --</option>
+                            {% for loc in predefined_locations %}
+                            <option value="{{ loc }}" {% if ambulance and ambulance.current_location == loc %}selected{% endif %}>
+                                {{ loc }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Select one of the nodes from the predefined Coimbatore road graph.</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="status" class="form-label fw-semibold">Operational Status <span class="text-danger">*</span></label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="Available" {% if not ambulance or ambulance.status == 'Available' %}selected{% endif %}>Available (Ready for dispatch)</option>
+                            <option value="Busy" {% if ambulance and ambulance.status == 'Busy' %}selected{% endif %}>Busy (Assigned to emergency)</option>
+                            <option value="Maintenance" {% if ambulance and ambulance.status == 'Maintenance' %}selected{% endif %}>Maintenance (Under service)</option>
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('list_ambulances') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                            <i class="bi bi-check2-circle me-1"></i> {% if ambulance %}Save Changes{% else %}Register Ambulance{% endif %}
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

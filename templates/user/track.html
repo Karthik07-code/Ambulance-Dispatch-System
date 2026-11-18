@@ -1,0 +1,463 @@
+{% extends "user/base_user.html" %}
+
+{% block title %}Tracking Ambulance - {{ booking.booking_reference }}{% endblock %}
+
+{% block extra_head %}
+<!-- Leaflet routing & polyline -->
+<style>
+    #tracking-map {
+        height: 380px;
+        width: 100%;
+        border-radius: 1rem;
+    }
+    @media (min-width: 640px) {
+        #tracking-map {
+            height: 480px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto py-2 sm:py-4">
+
+    <!-- Top Status Banner -->
+    <div class="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div>
+            <div class="flex items-center gap-2 mb-1">
+                <span id="badge-status" class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider
+                    {% if booking.request_status == 'Pending' %}bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800
+                    {% elif booking.request_status == 'Assigned' %}bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800
+                    {% elif booking.request_status == 'Completed' %}bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800
+                    {% else %}bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600{% endif %}">
+                    <span id="status-icon" class="inline-block w-2 h-2 rounded-full me-1
+                        {% if booking.request_status == 'Pending' %}bg-amber-500 animate-ping
+                        {% elif booking.request_status == 'Assigned' %}bg-blue-500 animate-pulse
+                        {% elif booking.request_status == 'Completed' %}bg-emerald-500
+                        {% else %}bg-slate-400{% endif %}"></span>
+                    <span id="status-text">{{ booking.request_status }}</span>
+                </span>
+                <span class="text-xs text-slate-400 font-mono">Ref: {{ booking.booking_reference }}</span>
+            </div>
+            <h1 id="headline-status" class="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                {% if booking.request_status == 'Pending' %}
+                    Request Received — Waiting for Ambulance Assignment
+                {% elif booking.request_status == 'Assigned' %}
+                    Ambulance {{ booking.ambulance_number }} Dispatched &amp; En Route
+                {% elif booking.request_status == 'Completed' %}
+                    Ambulance Has Arrived / Call Completed
+                {% elif booking.request_status == 'Cancelled' %}
+                    This Emergency Booking Has Been Cancelled
+                {% endif %}
+            </h1>
+        </div>
+
+        <!-- Connection & GPS Freshness -->
+        <div class="flex items-center gap-3 self-start sm:self-center">
+            <div class="text-right">
+                <div class="flex items-center justify-end gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    <span id="connection-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="connection-label">Live Sync</span>
+                </div>
+                <div id="last-update-time" class="text-[10px] text-slate-400 font-mono">Updated just now</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Grid: Map & Live Telemetry -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        
+        <!-- Left: Interactive Tracking Map -->
+        <div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-3 sm:p-4 relative">
+            <div id="tracking-map"></div>
+            <!-- Map Legend / Controls Overlay -->
+            <div class="absolute bottom-6 left-6 z-[400] flex flex-wrap gap-2 pointer-events-none">
+                <span class="bg-white/95 dark:bg-slate-900/95 backdrop-blur px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 shadow border border-slate-200 dark:border-slate-700 pointer-events-auto">
+                    <i class="fa-solid fa-location-dot text-rose-600 me-1"></i> Pickup: {{ booking.pickup_address }}
+                </span>
+                <span id="legend-amb" class="{% if not booking.ambulance_number %}hidden{% endif %} bg-white/95 dark:bg-slate-900/95 backdrop-blur px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 shadow border border-slate-200 dark:border-slate-700 pointer-events-auto">
+                    <i class="fa-solid fa-truck-medical text-blue-600 me-1"></i> Unit: <span id="legend-amb-num">{{ booking.ambulance_number }}</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- Right: Dispatch Telemetry & Emergency Actions -->
+        <div class="space-y-4">
+
+            <!-- ETA & Route Card -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-5">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Estimated Arrival Time (ETA)
+                </span>
+                <div class="flex items-baseline gap-2 mb-2">
+                    <span id="eta-display" class="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
+                        {{ booking.eta_text }}
+                    </span>
+                </div>
+                <div id="distance-info" class="{% if not booking.distance_km %}hidden{% endif %} flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 font-medium mb-3">
+                    <i class="fa-solid fa-road text-slate-400"></i>
+                    <span>Shortest Road Distance: <strong id="distance-km">{{ booking.distance_km }} km</strong></span>
+                </div>
+
+                <!-- Dijkstra Path Steps -->
+                <div id="route-steps-box" class="{% if not booking.route %}hidden{% endif %} border-t border-slate-100 dark:border-slate-700 pt-3">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Dijkstra Planned Route:</span>
+                    <div id="route-steps" class="text-xs font-mono bg-slate-50 dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 break-words leading-relaxed">
+                        {{ booking.route }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Patient & Call Details Card -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-5">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-3">
+                    Call Record Details
+                </span>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+                        <span class="text-slate-500">Patient:</span>
+                        <span class="font-bold text-slate-900 dark:text-white">{{ booking.patient_name }}</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+                        <span class="text-slate-500">Severity Level:</span>
+                        <span class="font-bold {% if booking.severity == 'Critical' %}text-rose-600{% elif booking.severity == 'High' %}text-amber-500{% else %}text-blue-500{% endif %}">
+                            {{ booking.severity }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-slate-100 dark:border-slate-700/60">
+                        <span class="text-slate-500">Nearest Hub:</span>
+                        <span class="font-medium text-slate-700 dark:text-slate-300">{{ booking.emergency_location }}</span>
+                    </div>
+                    {% if booking.emergency_note %}
+                    <div class="pt-1">
+                        <span class="text-slate-500 block mb-0.5">Note:</span>
+                        <span class="italic text-slate-600 dark:text-slate-300">{{ booking.emergency_note }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Live Location Sharing Toggle -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <i class="fa-solid fa-person-walking text-blue-500"></i>
+                            <span>Share Moving Live Location</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            Transmits your GPS updates if you are on the move.
+                        </p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="toggle-live-gps" class="sr-only peer">
+                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+                <div id="live-sharing-status" class="hidden mt-2 text-[11px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1">
+                    <i class="fa-solid fa-circle-dot animate-ping"></i> Live GPS sharing is active
+                </div>
+            </div>
+
+            <!-- Cancel Action -->
+            <div class="pt-1">
+                {% if booking.request_status in ('Pending', 'Assigned') %}
+                <button type="button" id="btn-open-cancel-modal"
+                        class="w-full py-3 rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/60 font-semibold text-xs transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-ban"></i>
+                    <span>Cancel This Ambulance Booking</span>
+                </button>
+                {% else %}
+                <div class="text-center text-xs text-slate-400 italic py-2">
+                    Booking status is {{ booking.request_status }}.
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Cancellation Confirmation Modal -->
+<div id="cancel-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
+        <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-4 text-xl">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-1">Confirm Cancellation</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">
+            Are you sure you want to cancel this emergency request? If an ambulance is already en route, it will be immediately released back into the fleet.
+        </p>
+
+        <form id="cancel-booking-form" class="space-y-4">
+            <div>
+                <label for="cancel_reason" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Reason for cancellation (optional):
+                </label>
+                <input type="text" id="cancel_reason" name="cancel_reason" placeholder="e.g. Patient taken via private vehicle"
+                       class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none">
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button type="button" id="btn-close-cancel-modal"
+                        class="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold">
+                    Keep Booking
+                </button>
+                <button type="submit" id="btn-confirm-cancel"
+                        class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/30">
+                    Yes, Cancel Request
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Booking secure token from URL path
+    const trackingToken = "{{ raw_token }}";
+
+    // Pickup Coordinates
+    const pickupLat = {{ booking.latitude or 11.0168 }};
+    const pickupLng = {{ booking.longitude or 76.9558 }};
+    let ambLat = {{ booking.ambulance_lat or 'null' }};
+    let ambLng = {{ booking.ambulance_lng or 'null' }};
+
+    // Initialize Leaflet Map
+    const map = L.map('tracking-map').setView([pickupLat, pickupLng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18
+    }).addTo(map);
+
+    // Pickup Marker (Red Pin)
+    const redPin = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+    });
+    const pickupMarker = L.marker([pickupLat, pickupLng], { icon: redPin })
+        .addTo(map)
+        .bindPopup("<b>Pickup Location</b><br>{{ booking.pickup_address }}")
+        .openPopup();
+
+    // Ambulance Marker (Blue Pin)
+    const bluePin = L.icon({
+        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+    });
+    let ambulanceMarker = null;
+    let routePolyline = null;
+
+    function renderAmbulanceAndRoute(data) {
+        if (data.ambulance_lat && data.ambulance_lng && data.request_status === 'Assigned') {
+            const ambLatLng = [data.ambulance_lat, data.ambulance_lng];
+            if (!ambulanceMarker) {
+                ambulanceMarker = L.marker(ambLatLng, { icon: bluePin })
+                    .addTo(map)
+                    .bindPopup(`<b>Ambulance ${data.ambulance_number || ''}</b><br>En route to your location`);
+            } else {
+                ambulanceMarker.setLatLng(ambLatLng);
+            }
+
+            // Draw route polyline
+            if (data.route_points && data.route_points.length > 0) {
+                const latLngs = data.route_points.map(p => [p.lat, p.lng]);
+                if (routePolyline) {
+                    map.removeLayer(routePolyline);
+                }
+                routePolyline = L.polyline(latLngs, {
+                    color: '#e11d48',
+                    weight: 5,
+                    opacity: 0.85,
+                    dashArray: '8, 8'
+                }).addTo(map);
+
+                // Fit bounds to show both ambulance and pickup
+                map.fitBounds(L.latLngBounds([pickupMarker.getLatLng(), ambulanceMarker.getLatLng()]).pad(0.2));
+            }
+        }
+    }
+
+    // Initial render if ambulance already assigned
+    {% if booking.request_status == 'Assigned' and booking.ambulance_lat %}
+    renderAmbulanceAndRoute({
+        ambulance_lat: ambLat,
+        ambulance_lng: ambLng,
+        ambulance_number: "{{ booking.ambulance_number }}",
+        request_status: "Assigned",
+        route_points: {{ booking.route_points|tojson }}
+    });
+    {% endif %}
+
+    // Setup Socket.IO Real-time Connection
+    const socket = io();
+    const connDot = document.getElementById('connection-dot');
+    const connLabel = document.getElementById('connection-label');
+
+    socket.on('connect', function() {
+        connDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+        connLabel.innerText = 'Live Sync';
+        // Join secure booking-specific room
+        socket.emit('join_booking_tracking', { token: trackingToken });
+    });
+
+    socket.on('disconnect', function() {
+        connDot.className = 'w-2 h-2 rounded-full bg-amber-500';
+        connLabel.innerText = 'Reconnecting...';
+    });
+
+    // Real-time Event Listeners
+    socket.on('booking_status_update', function(data) {
+        handleStatusUpdate(data);
+    });
+
+    socket.on('ambulance_location_update', function(data) {
+        if (ambulanceMarker && data.latitude && data.longitude) {
+            ambulanceMarker.setLatLng([data.latitude, data.longitude]);
+        }
+        document.getElementById('last-update-time').innerText = "Updated " + new Date().toLocaleTimeString();
+    });
+
+    socket.on('eta_update', function(data) {
+        if (data.eta_text) {
+            document.getElementById('eta-display').innerText = data.eta_text;
+        }
+        if (data.distance_km) {
+            document.getElementById('distance-km').innerText = data.distance_km + " km";
+            document.getElementById('distance-info').classList.remove('hidden');
+        }
+        document.getElementById('last-update-time').innerText = "Updated " + new Date().toLocaleTimeString();
+    });
+
+    function handleStatusUpdate(data) {
+        document.getElementById('status-text').innerText = data.request_status;
+        document.getElementById('last-update-time').innerText = "Updated " + new Date().toLocaleTimeString();
+
+        if (data.request_status === 'Assigned') {
+            document.getElementById('headline-status').innerHTML = `Ambulance ${data.ambulance_number || ''} Dispatched &amp; En Route`;
+            document.getElementById('legend-amb').classList.remove('hidden');
+            if (data.ambulance_number) {
+                document.getElementById('legend-amb-num').innerText = data.ambulance_number;
+            }
+            if (data.route) {
+                document.getElementById('route-steps-box').classList.remove('hidden');
+                document.getElementById('route-steps').innerText = data.route;
+            }
+            renderAmbulanceAndRoute(data);
+        } else if (data.request_status === 'Completed') {
+            document.getElementById('headline-status').innerText = 'Ambulance Has Arrived / Call Completed';
+            document.getElementById('eta-display').innerText = 'Arrived';
+        } else if (data.request_status === 'Cancelled') {
+            document.getElementById('headline-status').innerText = 'This Emergency Booking Has Been Cancelled';
+            document.getElementById('eta-display').innerText = 'Cancelled';
+        }
+    }
+
+    // Polling Fallback (Every 6 seconds)
+    async function pollTrackingUpdate() {
+        try {
+            const resp = await fetch(`/api/user/tracking/${trackingToken}`);
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.success && data.booking) {
+                    handleStatusUpdate(data.booking);
+                }
+            }
+        } catch (e) {
+            // silent fallback
+        }
+    }
+    const pollInterval = setInterval(pollTrackingUpdate, 6000);
+
+    // Cancellation Modal Logic
+    const cancelModal = document.getElementById('cancel-modal');
+    const openCancelBtn = document.getElementById('btn-open-cancel-modal');
+    const closeCancelBtn = document.getElementById('btn-close-cancel-modal');
+    const cancelForm = document.getElementById('cancel-booking-form');
+
+    if (openCancelBtn) {
+        openCancelBtn.addEventListener('click', () => cancelModal.classList.remove('hidden'));
+    }
+    if (closeCancelBtn) {
+        closeCancelBtn.addEventListener('click', () => cancelModal.classList.add('hidden'));
+    }
+
+    if (cancelForm) {
+        cancelForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const reason = document.getElementById('cancel_reason').value;
+
+            try {
+                const resp = await fetch(`/api/user/tracking/${trackingToken}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason })
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    alert(result.message);
+                    window.location.reload();
+                } else {
+                    alert(result.message || "Failed to cancel booking.");
+                }
+            } catch (err) {
+                alert("Error cancelling booking. Please try again.");
+            }
+        });
+    }
+
+    // User Moving Live Location Sharing (Optional Feature from Sec 5.5)
+    let watchGpsId = null;
+    const toggleLiveGps = document.getElementById('toggle-live-gps');
+    const liveStatusText = document.getElementById('live-sharing-status');
+
+    if (toggleLiveGps) {
+        toggleLiveGps.addEventListener('change', function() {
+            if (this.checked) {
+                if (!navigator.geolocation) {
+                    alert("Geolocation not supported by this device.");
+                    this.checked = false;
+                    return;
+                }
+                liveStatusText.classList.remove('hidden');
+                watchGpsId = navigator.geolocation.watchPosition(
+                    async function(pos) {
+                        try {
+                            await fetch(`/api/user/tracking/${trackingToken}/location`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    latitude: pos.coords.latitude,
+                                    longitude: pos.coords.longitude
+                                })
+                            });
+                        } catch(e) {}
+                    },
+                    function(err) {
+                        console.warn("GPS tracking error:", err);
+                    },
+                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+                );
+            } else {
+                liveStatusText.classList.add('hidden');
+                if (watchGpsId !== null) {
+                    navigator.geolocation.clearWatch(watchGpsId);
+                    watchGpsId = null;
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}
+
